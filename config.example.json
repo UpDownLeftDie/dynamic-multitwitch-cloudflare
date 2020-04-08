@@ -1,5 +1,7 @@
 {
   "api_key": "ABC_D",
   "zone_identifier": "abc123",
-  "id": "abc123"
+  "id": "abc123",
+  "interval_secs": 60,
+  "twitch_redis_cache_url": "https://yourdomain.com/streams/islive"
 }

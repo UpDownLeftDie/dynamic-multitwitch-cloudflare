@@ -13,9 +13,11 @@ import (
 )
 
 type configs struct {
-	APIKey string `json:"api_key"`
-	ZoneID string `json:"zone_identifier"`
-	ID     string `json:"id"`
+	APIKey              string `json:"api_key"`
+	ZoneID              string `json:"zone_identifier"`
+	ID                  string `json:"id"`
+	IntervalS           int    `json:"interval_secs"`
+	TwitchRedisCacheURL string `json:"twitch_redis_cache_url"`
 }
 
 type actionValue struct {
@@ -31,15 +33,20 @@ type pageRule struct {
 }
 
 func main() {
-	checkLiveChannelsAndUpdate()
+	config := getConfig()
+	checkLiveChannelsAndUpdate(config)
 
-	ticker := time.NewTicker(60 * time.Second)
+	intervalS, err := time.ParseDuration(fmt.Sprintf("%ds", config.IntervalS))
+	if err != nil {
+		log.Fatalln(err)
+	}
+	ticker := time.NewTicker(intervalS)
 	quit := make(chan struct{})
 
 	for {
 		select {
 		case <-ticker.C:
-			checkLiveChannelsAndUpdate()
+			checkLiveChannelsAndUpdate(config)
 		case <-quit:
 			ticker.Stop()
 			return
@@ -47,10 +54,10 @@ func main() {
 	}
 }
 
-func checkLiveChannelsAndUpdate() {
+func checkLiveChannelsAndUpdate(config configs) {
 	twitchUserNames := getTwitchUserNames()
-	liveList := getOnline(twitchUserNames)
-	updateLink(liveList)
+	liveList := getOnline(config, twitchUserNames)
+	updateLink(config, liveList)
 }
 
 func getConfig() configs {
@@ -83,13 +90,13 @@ func getTwitchUserNames() []string {
 	return twitchUserNames
 }
 
-func getOnline(twitchUserNames []string) []string {
+func getOnline(config configs, twitchUserNames []string) []string {
 	type response struct {
 		IsLive bool `json:"isLive"`
 	}
 	var liveList []string
 	for _, username := range twitchUserNames {
-		url := fmt.Sprintf("https://api.updownleftdie.com/streams/islive/%s", username)
+		url := fmt.Sprintf("%s/%s", config.TwitchRedisCacheURL, username)
 		resp, err := http.Get(url)
 		if err != nil {
 			log.Fatalln(err)
@@ -114,7 +121,7 @@ func getOnline(twitchUserNames []string) []string {
 	return liveList
 }
 
-func updateLink(liveList []string) {
+func updateLink(config configs, liveList []string) {
 	liveListStr := strings.Join(liveList, "/")
 	liveListURL := fmt.Sprintf("http://multitwitch.tv/%s", liveListStr)
 
@@ -131,7 +138,6 @@ func updateLink(liveList []string) {
 	}
 	b, err := json.Marshal(putBody)
 
-	config := getConfig()
 	client := &http.Client{}
 	URL := fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/pagerules/%s", config.ZoneID, config.ID)
 	req, err := http.NewRequest(http.MethodPut, URL, bytes.NewBuffer(b))
